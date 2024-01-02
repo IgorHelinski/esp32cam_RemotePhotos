@@ -13,6 +13,7 @@ NOTES:
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
 #include <Arduino_JSON.h>
+#include <base64.h>
 
 #include "soc/soc.h"
 #include "soc/rtc_cntl_reg.h"
@@ -20,7 +21,9 @@ NOTES:
 const char* ssid = "A70";
 const char* password = "igormaja1";
 
-const char* serverName = "http://192.168.59.1/esp32RemotePhotos/photo_request.php?action=db_check";
+const char* serverName = "http://192.168.218.1/esp32RemotePhotos/photo_request.php?action=db_check";
+const char* uploadServer = "http://192.168.218.1/esp32RemotePhotos/photo_upload.php?action=db_upload";
+const char* upload_check = "http://192.168.218.1/esp32RemotePhotos/photo_upload.php?action=upload_check";
 
 const long refreshRate = 5000; // in milliseconds
 unsigned long previousMillis = 0; // holds millis value
@@ -91,19 +94,7 @@ void WifiConnect(){
 }
 
 void TakePicture(){
-  // we get the frame buffer from camera
-  camera_fb_t *fb = NULL;
-  fb = esp_camera_fb_get();
-  if(!fb){
-    Serial.println("ERROR:Frame buffer could not be acquierded!"); 
-    return; 
-  }
-  Serial.println("Success!, frame buffer acquired!");
-
-  char* uploadServer = "http://192.168.59.1/esp32RemotePhotos/photo_upload.php?action=upload&photoString=" + fb->buf;
   
-  // return frame buffer back for reuse
-  esp_camera_fb_return(fb);
 }
 
 void loop() {
@@ -118,18 +109,63 @@ void loop() {
       int httpResponceCode = http.GET();
 
       if (httpResponceCode>0) {
-        Serial.print("HTTP Response code: ");
+        Serial.print("HTTP Response code to checking db: ");
         Serial.println(httpResponceCode);
         requestValue = http.getString();
-        TakePicture();
       }else{
         Serial.print("Error code: ");
         Serial.println(httpResponceCode);
+        requestValue = "0";
       }
 
       http.end();
 
       Serial.println(requestValue);
+      if(requestValue == "1"){
+        Serial.println("Taking picture");
+        TakePicture();
+        // we get the frame buffer from camera
+        camera_fb_t *fb = NULL;
+        fb = esp_camera_fb_get();
+        if(!fb){
+          Serial.println("ERROR:Frame buffer could not be acquierded!"); 
+          return; 
+        }
+        Serial.println("Success!, frame buffer acquired!");
+      
+        String base64string = base64::encode(fb->buf, fb->len);
+        Serial.print(base64string);
+
+        http.begin(client, uploadServer);
+      
+        String httpRequestData = "base64image=" + base64string;
+        int requestRespone = http.POST(httpRequestData);
+        if (requestRespone>0) {
+          Serial.print("HTTP Response code to uploading image: ");
+          Serial.println(requestRespone);
+        }
+        else {
+          Serial.print("Error code: ");
+          Serial.println(requestRespone);
+        }
+        
+        // return frame buffer back for reuse
+        esp_camera_fb_return(fb);
+        http.end();
+
+        http.begin(client, upload_check);
+        int checkThing = http.GET();
+        if(checkThing > 0){
+          String value = http.getString();
+          Serial.print(value);
+        }else{
+          Serial.print("Damn boy u suck!");
+        }
+        
+         
+        http.end();
+      }
+
       previousMillis = currentMillis;
     } 
   }
