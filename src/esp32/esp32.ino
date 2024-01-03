@@ -21,9 +21,9 @@ NOTES:
 const char* ssid = "A70";
 const char* password = "igormaja1";
 
-const char* serverName = "http://192.168.218.1/esp32RemotePhotos/photo_request.php?action=db_check";
-const char* uploadServer = "http://192.168.218.1/esp32RemotePhotos/photo_upload.php?action=db_upload";
-const char* upload_check = "http://192.168.218.1/esp32RemotePhotos/photo_upload.php?action=upload_check";
+const char* serverName = "http://192.168.83.1/esp32RemotePhotos/photo_request.php?action=db_check";
+const char* uploadServer = "http://192.168.83.1/esp32RemotePhotos/photo_upload.php";
+const char* upload_check = "http://192.168.83.1/esp32RemotePhotos/photo_upload.php?action=upload_check";
 
 const long refreshRate = 5000; // in milliseconds
 unsigned long previousMillis = 0; // holds millis value
@@ -132,13 +132,22 @@ void loop() {
           return; 
         }
         Serial.println("Success!, frame buffer acquired!");
+        esp_camera_fb_return(fb);
+
+        for(int i = 0; i < 5; i++){
+          fb = esp_camera_fb_get();  
+          esp_camera_fb_return(fb);
+        }
+
+        fb = esp_camera_fb_get();
       
         String base64string = base64::encode(fb->buf, fb->len);
-        Serial.print(base64string);
+        //Serial.print(base64string);
 
         http.begin(client, uploadServer);
       
-        String httpRequestData = "base64image=" + base64string;
+        String httpRequestData = "base64image=" + base64string; 
+        http.addHeader("Content-Type", "application/x-www-form-urlencoded");
         int requestRespone = http.POST(httpRequestData);
         if (requestRespone>0) {
           Serial.print("HTTP Response code to uploading image: ");
